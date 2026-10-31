@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.pyc
+*.egg-info/
+timeline/build/
 external/library1/*
 !external/library1/.gitkeep
 external/library2/*
