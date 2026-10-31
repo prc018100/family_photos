@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: family-photos-timeline
+Version: 1.0.0
+Summary: Horizontal family photo timeline backed by Immich
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: jinja2>=3.1.0
+Requires-Dist: uvicorn>=0.32.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
