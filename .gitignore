@@ -1,0 +1,14 @@
+.env
+data/
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+*.egg-info/
+timeline/build/
+external/library1/*
+!external/library1/.gitkeep
+external/library2/*
+!external/library2/.gitkeep
+external/library3/*
+!external/library3/.gitkeep
