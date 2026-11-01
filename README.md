@@ -1,59 +1,37 @@
 # Family Photos
 
-A self-hosted photo library for the home server. [Immich](https://github.com/immich-app/immich) v3.3.5 holds the pictures, faces, places, and dates. A small timeline service in front of it is the page the family actually opens: a horizontal collage you scroll through time, with a date scrubber and filters for person, place, and date together.
+[Immich](https://github.com/immich-app/immich) v3.3.5 holds the pictures. The timeline on port 2284 is the page the family scrolls. Photos stay in iCloud, and this server copies new ones in every hour.
 
-The timeline is a FastAPI service plus a short browser script. A virtualized sideways strip is a poor fit for HTMX round-trips, and the Python side still matches the family portal.
+```bash
+./setup.sh
+```
 
-Immich is reached only from the timeline container. The browser gets thumbnails and previews from this service. The API key never leaves the server, and originals are never requested.
+Open http://192.168.1.3:2283, create the admin (the first account), then an API key. The key needs `asset.read`, `asset.view`, `person.read`, `user.read`, `library.read`, `library.create`, and `library.update`. Permission `all` is fine on this private server. Put it in `.env` as `IMMICH_API_KEY`.
 
-## Run this on the server, in this order
+```bash
+./import-icloud.sh you@icloud.com
+```
 
-Do this on the Fedora box, from a checkout of this repo. Use rootful Docker (`sudo docker`, or your user in the `docker` group). SELinux stays enforcing. You want Compose v2 (`docker compose`, the `docker-compose-plugin` package). The `name:` key in the compose file is not valid in Compose v1.
+That signs in (Apple asks for the password and a 2FA code only when the saved session is missing or expired), downloads originals including Live Photos, and creates the Immich external library itself. It then leaves `icloud-sync` running. Run the same command again only to refresh an expired Apple session. A later run downloads and scans new photos, not the whole library again.
 
-1. **Configure.**
+Timeline: http://192.168.1.3:2284
 
-   ```bash
-   cp .env.example .env
-   openssl rand -hex 24
-   ```
+Use the Immich phone app to look at photos, with backup turned off. The hourly sync is already the camera-roll copy, and iCloud keeps the other one. Turning phone backup on as well duplicates every photo.
 
-   Put that hex string in `DB_PASSWORD` (letters and digits only). Set `TZ` to the household timezone before any import. Point `UPLOAD_LOCATION` at a large disk and `DB_DATA_LOCATION` at a local SSD, not a network share. Set `IMMICH_PUBLIC_URL` to the address a phone will use for the Immich UI later (LAN IP or Tailscale name). Leave `IMMICH_API_KEY` empty for now.
+Before the Apple ID will work: Settings → Apple ID → iCloud → Access iCloud Data on the Web on, and Advanced Data Protection off.
 
-   Ports `80`, `3000`, `3001`, and `8080` are already taken (portal, AdGuard Home, Number Knockout, Minecraft manager). This stack publishes Immich on **2283** and the timeline on **2284**. Change `IMMICH_PORT` and `TIMELINE_PORT` if those are taken too. The machine-learning container listens on 3003 inside the Docker network only, so it does not clash with AdGuard or Number Knockout.
+If `docker compose ps` shows `icloud-sync` unhealthy:
 
-2. **Create the directories.**
+```bash
+docker compose logs icloud-sync
+./import-icloud.sh you@icloud.com
+```
 
-   ```bash
-   mkdir -p data/library data/postgres data/icloud data/icloud-session
-   ```
+`./setup.sh` writes `.env`, generates `DB_PASSWORD` from `/dev/urandom` (openssl is not required), creates the directories, and waits for Immich. The first boot imports map data before the health check answers, which can take several minutes. The wait is built for that.
 
-   `data/postgres` must be empty the first time. Postgres refuses to initialize into a directory that already has files.
+Ports **2283** (Immich) and **2284** (timeline) stay off 80, 3000, 3001, and 8080. Change them in `.env` if you need to. Do not port-forward them. Use Tailscale or Teleport.
 
-3. **Start Immich and the timeline.** This does not start the iCloud downloader.
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-   Wait until `family_photos_immich_server` is healthy (`docker compose ps`). The first start relabels the bind-mounted directories for SELinux. On a large existing photo tree that walk takes a while.
-
-4. **Create the Immich admin.** Open `http://<server>:2283`. The first account registered is the admin. Do that before anyone else can reach the port.
-
-5. **Create an API key.** In Immich, open the user menu and create an API key with **asset.read**, **asset.view**, and **person.read**. Put it in `.env` as `IMMICH_API_KEY`. Confirm `IMMICH_PUBLIC_URL` is a URL the phones can open, then recreate the timeline container so it sees the key:
-
-   ```bash
-   docker compose up -d --build timeline
-   ```
-
-6. **Import the pictures.** Follow [Import](#import) below. Use either an external library or the upload CLI for a given folder, not both.
-
-7. **Wait for Immich's jobs, then name people.** Administration → Jobs. Metadata extraction, thumbnail generation, face detection, and smart search all have to catch up. A large library on CPU can sit here for a long time. Then name people ([below](#name-people)). City, state, and country fill in from GPS during the metadata job. Photos with no GPS still appear, just without a place.
-
-8. **Open the timeline** at `http://<server>:2284`. It lands on the newest photos. Scroll sideways for older ones, or drag the date line.
-
-9. **Add the portal card** ([snippet](#family-portal-card)). Do that in the family portal repo, not in this one.
-
-Remote access stays on Tailscale or Teleport. Do not port-forward 2283 or 2284 on the router.
+The rest of this file is the detail behind those two commands.
 
 ## What the timeline does
 
@@ -72,7 +50,7 @@ Example: Mom at the beach in summer 2019. Select Mom, set From `2019-06-01` and 
 | `UPLOAD_LOCATION` | Immich's upload library, plus JPEG thumbnails and previews for every asset, including external libraries, plus transcoded video |
 | `DB_DATA_LOCATION` | Postgres. Local SSD only. Not NFS |
 | External library mounts | Your existing files, read in place, not copied |
-| `ICLOUD_DOWNLOAD_LOCATION` | Originals from icloudpd, if you use that |
+| `ICLOUD_DOWNLOAD_LOCATION` | iCloud originals. Mounted read-only into Immich at `/mnt/media/icloud` |
 | `model-cache` volume | Machine-learning models, a few GB |
 
 External-library originals are not copied into `UPLOAD_LOCATION`. Generated JPEG thumbnails and previews still are. Budget roughly 1–2 MB of generated files per photo, so 100,000 photos is on the order of 100–200 GB in the upload location, before video transcodes. Leave more headroom than that. Video transcoding can add another large copy.
@@ -85,64 +63,46 @@ If the database disk is a spinning drive, uncomment `DB_STORAGE_TYPE: "HDD"` on 
 
 ## SELinux
 
-Every data bind mount uses `:Z`, which gives that container a private label. `/etc/localtime` is mounted read-only without `:Z`, because a private label on that file breaks the host timezone.
+Private data directories use `:Z`. `/etc/localtime` is mounted read-only without a label change, because a private label on that file breaks the host timezone.
 
-`:Z` on a directory two containers use at once makes them lock each other out. icloudpd and Immich are set up so they are not both running against the download directory: the iCloud service is a one-shot `docker compose run`. If you later leave `icloudpd --watch-with-interval` running while Immich is up, change both mounts of that path from `:Z` to `:z` (shared label).
+The iCloud download is the exception. icloudpd writes it and Immich reads it at the same time, so those mounts use the shared `:z` label. `./import-icloud.sh` does not ask you to point `EXTERNAL_LIBRARY_1` at that folder. Immich already sees it at `/mnt/media/icloud`.
 
-The first start of a large external library spends a long time relabeling files. Do not turn SELinux off, and do not add `security_opt: label:disable`. If a container reports "Permission denied" on a mount, check `sudo ausearch -m avc -ts recent` and confirm the compose line still has `:Z`.
+The first start of a large photo tree spends a while relabeling files. Do not turn SELinux off, and do not add `security_opt: label:disable`. If a container reports "Permission denied" on a mount, check `sudo ausearch -m avc -ts recent`.
 
 ## First-time Immich
 
-- `http://<server>:2283` after step 3.
+- `./setup.sh` opens Immich at the address in `IMMICH_PUBLIC_URL` (http://192.168.1.3:2283 unless you changed it).
 - Register the admin. That first user owns the library the timeline reads. The API key has to belong to that user (or another user you want the timeline to see).
-- User menu → API Keys → New key. Permissions: `asset.read`, `asset.view`, `person.read`. If a timeline request says the key is missing a permission, add it. An all-access key is fine on this private server if you would rather not pick through the list.
-- Put the key in `.env` and run `docker compose up -d --build timeline`.
+- User menu → API Keys → New key, as the admin. The timeline needs `asset.read`, `asset.view`, and `person.read`. `./import-icloud.sh` and the hourly sync also need `user.read`, `library.read`, `library.create`, and `library.update`, because creating an external library is an admin call. Permission `all` covers that list.
+- Put the key in `.env`. `./import-icloud.sh` recreates the timeline container so it sees the key.
 - `http://<server>:2284/healthz` returns `{"status":"ok","immich":"configured"}`. The portal probe uses this URL. It stays 200 when the process is up, including before the key is set (`immich` is `unconfigured` then). It does not fail the card when a background job is still running.
 
 ## Import
 
 Pick one home for each file. The same bytes in the upload library and in an external library show up as a duplicate pair.
 
-### iCloud, on the server (icloudpd)
+### iCloud
 
-The downloader is pinned to `icloudpd/icloudpd:1.32.3` and is not started by `docker compose up`. Apple's web session needs an interactive 2FA code the first time, and again whenever Apple expires it (weeks or months later). An app-specific password does not replace that session.
+`./import-icloud.sh you@icloud.com` is the whole import. It uses icloudpd 1.32.3 to download original files and Live Photo movies into `ICLOUD_DOWNLOAD_LOCATION` (default `./data/icloud`), which Compose already mounts read-only at `/mnt/media/icloud`. The script then calls Immich's API: it creates an external library named iCloud, or reuses one that already has that path, and queues a scan. Nothing in the Immich library screen has to be filled in by hand.
 
-On the Apple ID, before this will work:
+The same command starts `icloud-sync`, which repeats the download every hour (`ICLOUD_SYNC_INTERVAL`, default 3600, the same cadence as icloudpd `--watch-with-interval`) and queues another scan afterward. `restart: unless-stopped` brings it back after a reboot. `--until-found` (default 10) stops a later run once it hits photos already on disk, so the hourly pass does not walk the entire Apple library.
 
-- Settings → Apple ID → iCloud → Access iCloud Data on the Web: on
-- Settings → Apple ID → iCloud → Advanced Data Protection: off
+Apple's web session is not an app-specific password. It expires every so often. When it does, the sync container logs this and stays up with a failed health check, instead of looping restarts:
 
-Advanced Data Protection blocks the photos web API. Do not put the Apple password on the command line. icloudpd prompts for it, and a `--password` flag would land in shell history and in `docker inspect`.
-
-Authorize, then download originals, including Live Photo videos:
-
-```bash
-docker compose --profile icloud run --rm -it icloud \
-  icloudpd \
-  --username you@icloud.com \
-  --directory /data \
-  --cookie-directory /cookies \
-  --auth-only
-
-docker compose --profile icloud run --rm -it icloud \
-  icloudpd \
-  --username you@icloud.com \
-  --directory /data \
-  --cookie-directory /cookies \
-  --folder-structure '{:%Y/%m}' \
-  --size original \
-  --live-photo-size original
+```text
+Apple iCloud session expired or was rejected.
+Photos are not downloading. Immich will not see new iCloud photos until you re-authenticate.
+Run this on the server:
+  ./import-icloud.sh you@icloud.com
 ```
 
-Cookies stay in `ICLOUD_COOKIE_LOCATION`. Re-run the `--auth-only` command when a later download says the session is no longer valid.
+That command is also the re-auth. It stops the sync, prompts only if the session is dead, downloads what is new, scans, and starts the sync again.
 
-Do not pass `--auto-delete` unless you want files removed from the server when they disappear from iCloud. Do not pass `--set-exif-datetime` on the first import. The default download is Apple's original file, and that file already has the capture date and GPS. `--set-exif-datetime` rewrites metadata. Use it only to repair files that have no EXIF date, and do that before Immich scans them.
+`./import-icloud.sh --once you@icloud.com` downloads and scans without leaving the hourly service running.
 
-Rerunning the download skips files already saved. icloudpd dedupes by file name in the download directory. That is separate from Immich's checksum dedupe.
+Do not turn on icloudpd `--auto-delete` or `--set-exif-datetime`. The download is Apple's original file, which already has the capture date and GPS. `--set-exif-datetime` rewrites metadata. Deleting from iCloud should not delete the server copy.
 
-To keep pulling new iCloud photos, add `--watch-with-interval 3600` and read the SELinux note above if that container stays up next to Immich.
-
-There is a maintainer notice on the icloudpd project. The commands above match v1.32.3. Check the release notes before bumping the image tag.
+There is a maintainer notice on the icloudpd project. The image tag is pinned to 1.32.3. Check the release notes before bumping it.
 
 ### iCloud, from a Mac
 
@@ -154,7 +114,9 @@ Copy the folder to the server (`rsync` over Tailscale is enough) and treat it as
 
 ### Load the files into Immich
 
-**External library (right choice for the big historical dump).** The files stay where they are.
+The iCloud folder is already an external library after `./import-icloud.sh`. The steps below are for other collections, or for a one-time upload when Immich should own the file.
+
+**External library (right choice for another existing collection).** The files stay where they are.
 
 In `.env`, point `EXTERNAL_LIBRARY_1` (or 2, or 3) at the host directory. The defaults `./external/library1` and so on are empty placeholders so Compose has something to mount. Restart the server after changing them:
 
@@ -189,7 +151,9 @@ docker run --rm -it \
 
 Drop `--dry-run` when the list looks right. The CLI hashes each file and Immich rejects bytes it already has, so a second upload does not create a second timeline entry. From the server itself, `http://immich-server:2283/api` only works on the Compose network. From the host, use the published port.
 
-**Phone backup from here on.** Point the Immich mobile app at `http://<tailscale-host>:2283` and let it back up the camera roll into the upload library. Those photos join this timeline. Don't also keep downloading that same camera roll with icloudpd, or every new photo arrives twice.
+**Immich on the phone, for this house.** Install the app and point it at `http://192.168.1.3:2283` (or the Tailscale name). Leave backup off. iCloud remains the phone's photo library, and `icloud-sync` is what copies it onto this server. Phone backup plus that sync imports the same camera roll twice.
+
+**If you do not use iCloud Photos,** skip `./import-icloud.sh` and turn backup on in the Immich app instead. Those uploads land in `UPLOAD_LOCATION` and show up on the timeline. Do not also point an external library at an iCloud download of that same camera.
 
 ### Duplicates
 
@@ -284,4 +248,4 @@ pip install -e ".[dev]"
 pytest
 ```
 
-CI on GitHub Actions runs that test suite and `docker compose config`. The tests mock Immich. They cover the API client (including the refusal to follow a redirect to an original file) and the grouping and filter rules, including Mom plus a place plus summer 2019.
+CI on GitHub Actions runs the timeline tests, the iCloud library helper tests, a password-generator check, and `docker compose config`. The tests mock Immich. They cover the API client (including the refusal to follow a redirect to an original file), the grouping and filter rules, and creating or reusing the iCloud external library.
