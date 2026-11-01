@@ -31,10 +31,18 @@ services:
       - ${EXTERNAL_LIBRARY_3:-./external/library3}:/mnt/media/library3:ro,Z
       # Shared with icloudpd. :z, not :Z, so both containers can use the tree.
       - ${ICLOUD_DOWNLOAD_LOCATION:-./data/icloud}:/mnt/media/icloud:ro,z
+      # Synced trees. :z is the shared container label so this container can
+      # read them under enforcing SELinux without the private :Z category
+      # that would lock out the sync tool. Read-only, so Immich cannot write.
+      - ${SYNC_PICTURES_LOCATION:-./data/sync-pictures}:/mnt/media/sync-pictures:ro,z
+      - ${SYNC_VIDEO_LOCATION:-./data/sync-video}:/mnt/media/sync-video:ro,z
       # No :Z here. A private label on this file breaks the host timezone.
       - /etc/localtime:/etc/localtime:ro
     env_file:
       - .env
+    environment:
+      # Pin the URL the server uses. .env must not retarget this at :2283.
+      IMMICH_MACHINE_LEARNING_URL: http://immich-machine-learning:3003
     ports:
       - "${IMMICH_BIND:-0.0.0.0}:${IMMICH_PORT:-2283}:2283"
     depends_on:
@@ -64,6 +72,11 @@ services:
       - model-cache:/cache
     env_file:
       - .env
+    environment:
+      # .env sets IMMICH_PORT so the published host port and the server match.
+      # Machine learning reads that same variable and would listen on 2283.
+      # `environment` overrides env_file, including a value already in .env.
+      IMMICH_PORT: "3003"
     restart: unless-stopped
     healthcheck:
       disable: false

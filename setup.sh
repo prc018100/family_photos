@@ -28,6 +28,7 @@ fi
 load_env
 mkdir -p data/library data/postgres \
   "$ICLOUD_DOWNLOAD_LOCATION" "$ICLOUD_COOKIE_LOCATION" \
+  data/sync-pictures data/sync-video \
   external/library1 external/library2 external/library3
 
 echo "Starting Immich and the timeline."
