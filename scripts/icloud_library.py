@@ -71,21 +71,34 @@ def _request(method: str, url: str, api_key: str, body: dict | None, timeout: fl
         return exc.code, exc.read()
 
 
-def ensure_icloud_library(
+NIGHTLY_LIBRARY_SCAN = "0 0 * * *"
+SYNC_LIBRARIES = (
+    ("Sync pictures", "/mnt/media/sync-pictures"),
+    ("Sync video", "/mnt/media/sync-video"),
+)
+
+
+def _sender(base_url: str, api_key: str, timeout: float, transport):
+    if transport is not None:
+        return transport
+    base = base_url.rstrip("/")
+    return lambda method, path, body: _request(method, base + path, api_key, body, timeout)
+
+
+def ensure_external_library(
     base_url: str,
     api_key: str,
     *,
-    import_path: str = IMPORT_PATH,
-    name: str = LIBRARY_NAME,
+    import_path: str,
+    name: str,
     timeout: float = 60,
     transport=None,
 ) -> dict:
-    """Find or create the library, then queue a scan. Returns the library id."""
+    """Find or create one external library, then queue a scan."""
 
     if not api_key:
         raise ImmichLibraryError("IMMICH_API_KEY is empty")
-    base = base_url.rstrip("/")
-    send = transport or (lambda method, path, body: _request(method, base + path, api_key, body, timeout))
+    send = _sender(base_url, api_key, timeout, transport)
 
     me = _json(send("GET", "/api/users/me", None), "current user")
     if not isinstance(me, dict) or not me.get("id"):
@@ -122,7 +135,76 @@ def ensure_icloud_library(
             action = "updated"
 
     _json(send("POST", f"/api/libraries/{library_id}/scan", None), "scan library", allow_empty=True)
-    return {"id": library_id, "action": action, "importPath": import_path}
+    return {"id": library_id, "action": action, "importPath": import_path, "name": name}
+
+
+def ensure_icloud_library(
+    base_url: str,
+    api_key: str,
+    *,
+    import_path: str = IMPORT_PATH,
+    name: str = LIBRARY_NAME,
+    timeout: float = 60,
+    transport=None,
+) -> dict:
+    return ensure_external_library(
+        base_url,
+        api_key,
+        import_path=import_path,
+        name=name,
+        timeout=timeout,
+        transport=transport,
+    )
+
+
+def ensure_nightly_library_scan(send) -> str:
+    """Turn on Immich's daily external-library scan without changing a custom schedule.
+
+    Returns "enabled", "already", or "forbidden".
+    """
+
+    result = send("GET", "/api/system-config", None)
+    if result[0] in {401, 403}:
+        return "forbidden"
+    config = _json(result, "read library scan schedule")
+    if not isinstance(config, dict):
+        raise ImmichLibraryError("Immich did not return system config")
+    library = config.get("library")
+    if not isinstance(library, dict):
+        library = {}
+        config["library"] = library
+    scan = library.get("scan")
+    if not isinstance(scan, dict):
+        scan = {}
+        library["scan"] = scan
+    changed = False
+    if scan.get("enabled") is not True:
+        scan["enabled"] = True
+        changed = True
+    if not scan.get("cronExpression"):
+        scan["cronExpression"] = NIGHTLY_LIBRARY_SCAN
+        changed = True
+    if not changed:
+        return "already"
+    _json(send("PUT", "/api/system-config", config), "update library scan schedule")
+    return "enabled"
+
+
+def ensure_sync_libraries(base_url: str, api_key: str, *, timeout: float = 60, transport=None) -> tuple[list[dict], str]:
+    send = _sender(base_url, api_key, timeout, transport)
+    results = [
+        ensure_external_library(
+            base_url,
+            api_key,
+            import_path=path,
+            name=name,
+            timeout=timeout,
+            transport=send,
+        )
+        for name, path in SYNC_LIBRARIES
+    ]
+    schedule = ensure_nightly_library_scan(send)
+    return results, schedule
 
 
 def _json(result: tuple[int, bytes], what: str, allow_empty: bool = False):
@@ -156,8 +238,25 @@ def main(argv: list[str]) -> int:
         code = int(argv[2])
         return 0 if session_needs_reauth(log, code) else 1
     base = os.environ.get("IMMICH_URL", "http://127.0.0.1:2283")
+    key = os.environ.get("IMMICH_API_KEY", "")
     try:
-        result = ensure_icloud_library(base, os.environ.get("IMMICH_API_KEY", ""))
+        if argv and argv[0] == "--sync-folders":
+            results, schedule = ensure_sync_libraries(base, key)
+            for result in results:
+                print(f"Immich library {result['id']} {result['action']}; scan queued for {result['importPath']}")
+            if schedule == "enabled":
+                print("Nightly external-library scan is on. New files show up after that scan, or run this script again.")
+            elif schedule == "already":
+                print("External-library scan was already scheduled. New files show up on that schedule, or run this script again.")
+            else:
+                print(
+                    "Could not confirm the nightly scan (the API key needs systemConfig.read and systemConfig.update). "
+                    "Libraries were still created and a scan was queued. "
+                    "Immich's default is a midnight scan; turn it on under Administration → Settings → Library if it is off.",
+                    file=sys.stderr,
+                )
+            return 0
+        result = ensure_icloud_library(base, key)
     except ImmichLibraryError as exc:
         print(exc, file=sys.stderr)
         return 1

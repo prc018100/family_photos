@@ -95,6 +95,66 @@ class LibraryTests(unittest.TestCase):
         self.assertIn("./import-icloud.sh ada@icloud.com", text)
         self.assertIn("session expired", text.lower())
 
+    def test_sync_libraries_are_idempotent_and_enable_nightly_scan(self):
+        from scripts.icloud_library import ensure_sync_libraries
+
+        pictures = "11111111-1111-4111-8111-111111111111"
+        video = "22222222-2222-4222-8222-222222222222"
+        config = {"library": {"scan": {"enabled": False}, "watch": {"enabled": False}}, "machineLearning": {"urls": ["http://immich-machine-learning:3003"]}}
+        libraries = []
+
+        def send(method, path, body):
+            if path == "/api/users/me":
+                return 200, json.dumps({"id": OWNER, "isAdmin": True}).encode()
+            if path == "/api/libraries" and method == "GET":
+                return 200, json.dumps(libraries).encode()
+            if path == "/api/libraries" and method == "POST":
+                lib_id = pictures if body["importPaths"] == ["/mnt/media/sync-pictures"] else video
+                created = {"id": lib_id, "name": body["name"], "importPaths": body["importPaths"]}
+                libraries.append(created)
+                return 201, json.dumps(created).encode()
+            if path.endswith("/scan"):
+                return 204, b""
+            if path == "/api/system-config" and method == "GET":
+                return 200, json.dumps(config).encode()
+            if path == "/api/system-config" and method == "PUT":
+                self.assertTrue(body["library"]["scan"]["enabled"])
+                self.assertEqual(body["library"]["watch"]["enabled"], False)
+                self.assertEqual(body["machineLearning"]["urls"], ["http://immich-machine-learning:3003"])
+                config.update(body)
+                return 200, json.dumps(body).encode()
+            raise AssertionError((method, path))
+
+        results, schedule = ensure_sync_libraries("http://immich.test", "secret-key", transport=send)
+        self.assertEqual(schedule, "enabled")
+        self.assertEqual([item["importPath"] for item in results], ["/mnt/media/sync-pictures", "/mnt/media/sync-video"])
+        self.assertEqual([item["action"] for item in results], ["created", "created"])
+
+        again, schedule_again = ensure_sync_libraries("http://immich.test", "secret-key", transport=send)
+        self.assertEqual(schedule_again, "already")
+        self.assertEqual([item["action"] for item in again], ["scanned", "scanned"])
+
+    def test_custom_scan_cron_is_left_alone(self):
+        from scripts.icloud_library import ensure_nightly_library_scan
+
+        calls = []
+
+        def send(method, path, body):
+            calls.append(method)
+            self.assertEqual(path, "/api/system-config")
+            return 200, json.dumps({"library": {"scan": {"enabled": True, "cronExpression": "15 3 * * *"}}}).encode()
+
+        self.assertEqual(ensure_nightly_library_scan(send), "already")
+        self.assertEqual(calls, ["GET"])
+
+    def test_missing_config_permission_does_not_raise(self):
+        from scripts.icloud_library import ensure_nightly_library_scan
+
+        def send(method, path, body):
+            return 403, b'{"message":"forbidden"}'
+
+        self.assertEqual(ensure_nightly_library_scan(send), "forbidden")
+
     def test_session_classifier(self):
         self.assertFalse(session_needs_reauth("Authentication completed successfully", 0))
         self.assertTrue(session_needs_reauth("Invalid email/password combination.", 1))

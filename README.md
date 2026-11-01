@@ -43,6 +43,36 @@ The rest of this file is the detail behind those two commands.
 
 Example: Mom at the beach in summer 2019. Select Mom, set From `2019-06-01` and To `2019-08-31`, type `beach`, and press Show. If Immich has a city for that trip, you can set the city instead of, or as well as, the word.
 
+## Synced folders
+
+`~/sync/pictures` and `~/sync/video` on this server (`/home/funky/sync/pictures` and `/home/funky/sync/video`) can be external libraries. Immich mounts them read-only, so it cannot modify or delete them. The sync tool keeps writing. New files are picked up by Immich's nightly library scan (midnight). Run `./add-sync-libraries.sh` again to scan immediately.
+
+In `.env`:
+
+```bash
+SYNC_PICTURES_LOCATION=/home/funky/sync/pictures
+SYNC_VIDEO_LOCATION=/home/funky/sync/video
+```
+
+Then:
+
+```bash
+docker compose up -d --force-recreate immich-server immich-machine-learning
+./add-sync-libraries.sh
+```
+
+The script is safe to run again. It creates "Sync pictures" and "Sync video" if those container paths are not already libraries, turns the nightly scan on if it was off, and queues a scan. The API key needs the same library permissions as the iCloud import. Confirming the schedule also needs `systemConfig.read` and `systemConfig.update` (or permission `all`). Without those two, the libraries are still created and scanned; Immich's own default is already a midnight scan.
+
+These directories are labeled with the shared `:z` flag, not the private `:Z` flag. Under enforcing SELinux a container cannot read `~/sync` (it is `user_home_t`) unless the files carry a container file type. `:z` is that shared label, so Immich can read them and the sync tool, running as your user, can still read and write. `:Z` would give the files a category only the Immich container may use, and the sync tool would start failing. `:ro` alone, with no label change, is denied by SELinux.
+
+To remove a duplicate, use Immich's Utilities → Duplicates view to see which file it is, then delete that file yourself under `~/sync`. The sync tool propagates the delete to the other machines. Immich drops the asset on the next library scan. Do not delete it inside Immich expecting the sync folder to change; the mount is read-only.
+
+Leave the two variables commented out on a machine that does not have these folders. Compose then mounts empty directories under `./data` and nothing else changes.
+
+## Machine learning port
+
+`IMMICH_PORT=2283` in `.env` is the server's listen port and the host port. Machine learning reads that same variable. Passed through the shared env file, it was listening on 2283 instead of 3003, so face detection never reached it. Compose now sets `IMMICH_PORT=3003` on the machine-learning service only (that overrides `.env`) and sets `IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003` on the server. Recreate both containers after pulling this change. An `.env` that already contains `IMMICH_PORT=2283` does not need to be edited for this.
+
 ## Storage
 
 | Path | What lands there |
