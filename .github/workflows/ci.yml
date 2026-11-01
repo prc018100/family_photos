@@ -22,7 +22,7 @@ jobs:
         working-directory: timeline
         run: pytest -q
       - name: Test iCloud import helper
-        run: pytest -q scripts/tests
+        run: python -m pytest -q scripts/tests
       - name: Test shell helpers
         run: bash scripts/tests/test_password.sh && bash -n setup.sh && bash -n import-icloud.sh && bash -n icloud/sync.sh && bash -n scripts/lib.sh
 
