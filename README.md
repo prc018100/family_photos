@@ -12,7 +12,7 @@ Open http://192.168.1.3:2283, create the admin (the first account), then an API 
 ./import-icloud.sh you@icloud.com
 ```
 
-That signs in (Apple asks for the password and a 2FA code only when the saved session is missing or expired), downloads originals including Live Photos, and creates the Immich external library itself. It then leaves `icloud-sync` running. Run the same command again only to refresh an expired Apple session. A later run downloads and scans new photos, not the whole library again.
+That signs in (Apple asks for the password and a 2FA code only when the saved session is missing or expired), downloads originals including Live Photos from your library and every shared library, and creates the Immich external library itself. The first pass walks each library to the end. It then leaves `icloud-sync` running. An interrupted download does not count as finished, so the next run still walks whatever is left. After a library really finishes, later runs only pull new photos. `./import-icloud.sh --full you@icloud.com` forces another complete pass.
 
 Timeline: http://192.168.1.3:2284
 
@@ -85,7 +85,11 @@ Pick one home for each file. The same bytes in the upload library and in an exte
 
 `./import-icloud.sh you@icloud.com` is the whole import. It uses icloudpd 1.32.3 to download original files and Live Photo movies into `ICLOUD_DOWNLOAD_LOCATION` (default `./data/icloud`), which Compose already mounts read-only at `/mnt/media/icloud`. The script then calls Immich's API: it creates an external library named iCloud, or reuses one that already has that path, and queues a scan. Nothing in the Immich library screen has to be filled in by hand.
 
-The same command starts `icloud-sync`, which repeats the download every hour (`ICLOUD_SYNC_INTERVAL`, default 3600, the same cadence as icloudpd `--watch-with-interval`) and queues another scan afterward. `restart: unless-stopped` brings it back after a reboot. `--until-found` (default 10) stops a later run once it hits photos already on disk, so the hourly pass does not walk the entire Apple library.
+`icloudpd --list-libraries` is how the script finds them: `PrimarySync` (your library) and every `SharedSync-*` shared library. Each one is downloaded into its own folder under the iCloud directory (`PrimarySync/2024/03/...`, `SharedSync-.../2024/03/...`) so the same file name in two libraries does not overwrite. Immich scans the parent folder, so one external library covers all of them. A photo that really is in both your library and a shared library can show up twice; Immich's duplicate review is the place to sort that out.
+
+The same command starts `icloud-sync`, which repeats that check every hour (`ICLOUD_SYNC_INTERVAL`, default 3600) and queues another scan afterward. `restart: unless-stopped` brings it back after a reboot. A new shared library is downloaded in full the first time it appears. After a library's full pass exits successfully, a marker is written at `data/icloud-session/full-import-complete/<library>`. Only then do later runs pass `--until-found` (default 10), which stops once that many photos in a row are already on disk. A download that dies in the middle never writes the marker, so the next `./import-icloud.sh` or the hourly sync keeps walking that library. `./import-icloud.sh --full you@icloud.com` ignores the markers and walks every library again.
+
+If year folders from an earlier download are sitting directly in `data/icloud/` and `PrimarySync/` does not exist yet, the script moves those year folders into `PrimarySync/` first. The 390 files from an interrupted run stay put, and the full pass continues with the rest.
 
 Apple's web session is not an app-specific password. It expires every so often. When it does, the sync container logs this and stays up with a failed health check, instead of looping restarts:
 
@@ -96,7 +100,7 @@ Run this on the server:
   ./import-icloud.sh you@icloud.com
 ```
 
-That command is also the re-auth. It stops the sync, prompts only if the session is dead, downloads what is new, scans, and starts the sync again.
+That command is also the re-auth. It stops the sync, prompts only if the session is dead, downloads what is still missing, scans, and starts the sync again. Libraries that already have a completion marker stay incremental. `./import-icloud.sh --full you@icloud.com` is the re-auth that also walks every library from the start.
 
 `./import-icloud.sh --once you@icloud.com` downloads and scans without leaving the hourly service running.
 

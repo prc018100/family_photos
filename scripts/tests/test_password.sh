@@ -35,12 +35,59 @@ if ! postgres_initialized; then
   exit 1
 fi
 
-icloudpd_args sync ada@icloud.com
+export ICLOUD_COOKIE_LOCATION="$tmp/cookies"
+export ICLOUD_FORCE_FULL=0
+
+icloudpd_args sync ada@icloud.com PrimarySync
 joined="${ICLOUDPD_ARGS[*]}"
 [[ "$joined" == *"--size original"* ]]
 [[ "$joined" == *"--live-photo-size original"* ]]
-[[ "$joined" == *"--until-found"* ]]
+[[ "$joined" == *"--library PrimarySync"* ]]
+[[ "$joined" == *"--directory /data/PrimarySync"* ]]
+[[ "$joined" != *"--until-found"* ]]
 [[ "$joined" == *"--no-progress-bar"* ]]
-[[ "$joined" != *"--auth-only"* ]]
+[[ "$ICLOUDPD_INCREMENTAL" -eq 0 ]]
+
+mark_icloud_full_pass PrimarySync
+[[ -f "$tmp/cookies/full-import-complete/PrimarySync" ]]
+icloudpd_args sync ada@icloud.com PrimarySync
+joined="${ICLOUDPD_ARGS[*]}"
+[[ "$joined" == *"--until-found"* ]]
+[[ "$ICLOUDPD_INCREMENTAL" -eq 1 ]]
+
+export ICLOUD_FORCE_FULL=1
+icloudpd_args download ada@icloud.com PrimarySync
+joined="${ICLOUDPD_ARGS[*]}"
+[[ "$joined" != *"--until-found"* ]]
+[[ "$joined" != *"--no-progress-bar"* ]]
+[[ "$ICLOUDPD_INCREMENTAL" -eq 0 ]]
+
+icloudpd_args sync ada@icloud.com "SharedSync-Family Album"
+joined="${ICLOUDPD_ARGS[*]}"
+[[ "$joined" == *"--directory /data/SharedSync-Family_Album"* ]]
+[[ "$joined" == *"--library SharedSync-Family Album"* ]]
+[[ ! -f "$tmp/cookies/full-import-complete/SharedSync-Family_Album" ]]
+
+printf '%s\n' \
+  "Authentication completed successfully" \
+  "SharedSync-Zed" \
+  "PrimarySync" \
+  "SharedSync-Amy" \
+  "SomethingElse" \
+  | icloud_parse_libraries | icloud_sort_libraries > "$tmp/libs"
+printf '%s\n' PrimarySync SharedSync-Amy SharedSync-Zed > "$tmp/expect"
+diff -u "$tmp/expect" "$tmp/libs"
+
+root="$tmp/photos"
+mkdir -p "$root/2024/03" "$root/2019"
+touch "$root/2024/03/a.jpg" "$root/keep.txt"
+migrate_flat_download_into_primary "$root"
+[[ -f "$root/PrimarySync/2024/03/a.jpg" ]]
+[[ -d "$root/PrimarySync/2019" ]]
+[[ -f "$root/keep.txt" ]]
+[[ ! -d "$root/2024" ]]
+mkdir -p "$root/1999"
+migrate_flat_download_into_primary "$root"
+[[ -d "$root/1999" ]]
 
 echo "password and icloudpd args ok"
