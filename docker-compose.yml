@@ -5,10 +5,9 @@
 # Docker with SELinux enforcing:
 #   https://github.com/immich-app/immich/releases/download/v3.3.5/docker-compose.yml
 #
-# :Z on a bind mount gives that container a private SELinux label. Do not put
-# :Z on /etc/localtime (that relabels the host clock file). When two containers
-# must read the same directory at the same time, use the shared :z flag on
-# both mounts instead. See the README.
+# :Z on a bind mount gives that container a private label. Do not put
+# :Z on /etc/localtime (that relabels the host clock file). The iCloud
+# download is shared by the downloader and Immich, so those mounts use :z.
 #
 # Host ports 80, 3000, 3001, and 8080 are already taken by the family portal,
 # AdGuard Home, Number Knockout, and the Minecraft manager. Immich defaults to
@@ -30,6 +29,8 @@ services:
       - ${EXTERNAL_LIBRARY_1:-./external/library1}:/mnt/media/library1:ro,Z
       - ${EXTERNAL_LIBRARY_2:-./external/library2}:/mnt/media/library2:ro,Z
       - ${EXTERNAL_LIBRARY_3:-./external/library3}:/mnt/media/library3:ro,Z
+      # Shared with icloudpd. :z, not :Z, so both containers can use the tree.
+      - ${ICLOUD_DOWNLOAD_LOCATION:-./data/icloud}:/mnt/media/icloud:ro,z
       # No :Z here. A private label on this file breaks the host timezone.
       - /etc/localtime:/etc/localtime:ro
     env_file:
@@ -40,8 +41,15 @@ services:
       - redis
       - database
     restart: unless-stopped
+    # The image healthcheck hits /api/server/ping. The first boot imports
+    # geodata before that answers, so give it a long start period. A success
+    # during the start period still counts as healthy immediately.
     healthcheck:
-      disable: false
+      test: ["CMD", "immich-healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 15m
 
   immich-machine-learning:
     container_name: family_photos_immich_ml
@@ -90,11 +98,11 @@ services:
     environment:
       IMMICH_URL: http://immich-server:2283
       IMMICH_API_KEY: ${IMMICH_API_KEY:-}
-      IMMICH_PUBLIC_URL: ${IMMICH_PUBLIC_URL:-http://127.0.0.1:2283}
+      IMMICH_PUBLIC_URL: ${IMMICH_PUBLIC_URL:-http://192.168.1.3:2283}
       TIMELINE_BASIC_AUTH_USER: ${TIMELINE_BASIC_AUTH_USER:-}
       TIMELINE_BASIC_AUTH_PASSWORD: ${TIMELINE_BASIC_AUTH_PASSWORD:-}
       TIMELINE_PAGE_SIZE: ${TIMELINE_PAGE_SIZE:-48}
-      TZ: ${TZ:-UTC}
+      TZ: ${TZ:-America/Chicago}
     ports:
       - "${TIMELINE_BIND:-0.0.0.0}:${TIMELINE_PORT:-2284}:8080"
     depends_on:
@@ -108,21 +116,59 @@ services:
       retries: 5
       start_period: 20s
 
-  # Not started by `docker compose up`. First login is interactive because of
-  # Apple 2FA. See the README. `docker compose run` overrides this command.
+  # Interactive one-shot used by ./import-icloud.sh. Not started by setup.sh.
   icloud:
     profiles: ["icloud"]
     image: icloudpd/icloudpd:1.32.3
     stdin_open: true
     tty: true
     environment:
-      TZ: ${TZ:-UTC}
+      TZ: ${TZ:-America/Chicago}
     volumes:
-      - ${ICLOUD_DOWNLOAD_LOCATION:-./data/icloud}:/data:Z
-      - ${ICLOUD_COOKIE_LOCATION:-./data/icloud-session}:/cookies:Z
+      - ${ICLOUD_DOWNLOAD_LOCATION:-./data/icloud}:/data:z
+      - ${ICLOUD_COOKIE_LOCATION:-./data/icloud-session}:/cookies:z
     entrypoint: ["/app/entrypoint.sh"]
     command: ["icloudpd", "--help"]
     restart: "no"
+
+  # Started by ./import-icloud.sh after the first successful sign-in.
+  # Restart policy brings it back after a reboot. An expired Apple session
+  # stays up and goes unhealthy instead of crash-looping.
+  icloud-sync:
+    profiles: ["icloud"]
+    build:
+      context: .
+      dockerfile: icloud/Dockerfile
+    image: family-photos-icloud-sync:local
+    container_name: family_photos_icloud_sync
+    environment:
+      TZ: ${TZ:-America/Chicago}
+      ICLOUD_USERNAME: ${ICLOUD_USERNAME:-}
+      IMMICH_URL: http://immich-server:2283
+      IMMICH_API_KEY: ${IMMICH_API_KEY:-}
+      ICLOUD_IMPORT_PATH: /mnt/media/icloud
+      ICLOUD_LIBRARY_NAME: iCloud
+      ICLOUD_SYNC_INTERVAL: ${ICLOUD_SYNC_INTERVAL:-3600}
+      ICLOUD_UNTIL_FOUND: ${ICLOUD_UNTIL_FOUND:-10}
+    volumes:
+      - ${ICLOUD_DOWNLOAD_LOCATION:-./data/icloud}:/data:z
+      - ${ICLOUD_COOKIE_LOCATION:-./data/icloud-session}:/cookies:z
+    depends_on:
+      immich-server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import os,sys; sys.exit(0 if os.path.exists('/tmp/sync-state/healthy') and not os.path.exists('/tmp/sync-state/needs-reauth') else 1)",
+        ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20m
 
 volumes:
   model-cache:
