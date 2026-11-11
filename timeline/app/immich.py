@@ -68,6 +68,12 @@ def parse_asset(raw: dict) -> Photo | None:
     asset_id = raw.get("id")
     if not isinstance(asset_id, str) or not asset_id:
         return None
+    stack = raw.get("stack")
+    if isinstance(stack, dict):
+        primary = stack.get("primaryAssetId")
+        # Immich's own timeline shows only the top of a stack (burst, RAW+JPEG).
+        if isinstance(primary, str) and primary and primary != asset_id:
+            return None
     kind = raw.get("type") or "IMAGE"
     if kind not in {"IMAGE", "VIDEO"}:
         return None
@@ -94,6 +100,7 @@ def parse_asset(raw: dict) -> Photo | None:
         type=str(kind),
         live=bool(raw.get("livePhotoVideoId")),
         ratio=display_ratio(raw, exif),
+        moment=str(raw.get("localDateTime") or raw.get("fileCreatedAt") or ""),
     )
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.grouping import photo_matches
+from app.grouping import drop_copies, photo_matches
 from app.models import Photo, TimelineCriteria, TimelinePage
 from app.search import (
     InvalidCursor,
@@ -32,7 +32,7 @@ def _matching(
     before: date | None,
 ) -> list[Photo]:
     return _sort(
-        [photo for photo in photos if photo_matches(photo, criteria, jump=jump, before=before)]
+        drop_copies([photo for photo in photos if photo_matches(photo, criteria, jump=jump, before=before)])
     )
 
 

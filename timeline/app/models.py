@@ -27,6 +27,9 @@ class Photo:
     # Width over height as displayed (EXIF rotation applied). None when Immich
     # did not record the size; the browser then measures the thumbnail.
     ratio: float | None = None
+    # Immich's localDateTime to the millisecond. Two assets with the same
+    # moment and shape are copies of one shot (another library, an edit).
+    moment: str = ""
 
     @property
     def taken_on(self) -> date:

@@ -92,6 +92,34 @@ def photo_matches(
     return True
 
 
+def _shape(photo: Photo) -> str:
+    if photo.ratio is None:
+        return "?"
+    return "wide" if photo.ratio >= 1 else "tall"
+
+
+def drop_copies(photos: Sequence[Photo]) -> list[Photo]:
+    """Keep one asset per shot.
+
+    The same picture often reaches Immich twice: an iCloud export and a synced
+    folder, or an original and its edit. Those share the camera's timestamp to
+    the millisecond and the same shape. The copy with the most tagged people
+    wins, so a face found on only one copy is not lost.
+    """
+
+    best: dict[tuple[str, str], Photo] = {}
+    order: list[tuple[str, str]] = []
+    for photo in photos:
+        key = (photo.moment, _shape(photo)) if photo.moment else ("", photo.id)
+        current = best.get(key)
+        if current is None:
+            best[key] = photo
+            order.append(key)
+        elif (len(photo.people), current.id) > (len(current.people), photo.id):
+            best[key] = photo
+    return [best[key] for key in order]
+
+
 def group_photos(photos: Sequence[Photo]) -> list[DayGroup]:
     """Bucket photos by local day, oldest day first, stable within a day."""
 

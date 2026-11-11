@@ -82,10 +82,16 @@ function shownPhotos(day) {
 function packColumns(photos) {
   const height = layout.band;
   const gap = layout.gap;
-  const target = height * 0.62;
   const columns = [];
   let index = 0;
   while (index < photos.length) {
+    // Most columns are stacks of two or three. When an odd number of photos
+    // is left, one photo with people gets a column to itself, so a day ends
+    // on a full stack instead of a stray single.
+    const lead = photos[index];
+    const left = photos.length - index;
+    const feature = left % 2 === 1 && (hasPeople(lead) || left === 1);
+    const target = height * (feature ? 0.75 : 0.4);
     let best = null;
     let inverse = 0;
     for (let count = 1; count <= 3 && index + count <= photos.length; count += 1) {
@@ -93,9 +99,9 @@ function packColumns(photos) {
       inverse += 1 / ratioOf(item);
       const width = (height - gap * (count - 1)) / inverse;
       const slice = photos.slice(index, index + count);
-      // Faces stay big: a photo with people never lands in a three-high stack.
+      // Faces stay readable: a photo with people never lands in a three-high stack.
       if (count === 3 && slice.some(hasPeople)) break;
-      let score = Math.abs(Math.log(width / target));
+      const score = Math.abs(Math.log(width / target));
       if (!best || score < best.score) best = { count, width, score };
     }
     const items = photos.slice(index, index + best.count);
@@ -150,18 +156,39 @@ function layoutStrip() {
   strip.hidden = state.days.length === 0;
 }
 
+function copyKey(item) {
+  if (!item.moment) return "id:" + item.id;
+  const shape = item.ratio == null ? "?" : item.ratio >= 1 ? "wide" : "tall";
+  return item.moment + "|" + shape;
+}
+
+// The server drops copies within a page. A copy can land on the next page,
+// so the browser applies the same rule when pages are merged.
+function dropCopies(photos) {
+  const best = new Map();
+  for (const item of photos) {
+    const key = copyKey(item);
+    const current = best.get(key);
+    if (!current || item.people.length > current.people.length) best.set(key, item);
+  }
+  const keep = new Set([...best.values()].map((item) => item.id));
+  const seen = new Set();
+  return photos.filter((item) => {
+    if (!keep.has(item.id) || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 function mergeDays(current, incoming) {
   const byKey = new Map(current.map((day) => [day.key, { ...day, photos: day.photos.slice() }]));
   for (const day of incoming) {
     const existing = byKey.get(day.key);
     if (!existing) {
-      byKey.set(day.key, { ...day, photos: day.photos.slice() });
+      byKey.set(day.key, { ...day, photos: dropCopies(day.photos) });
       continue;
     }
-    const seen = new Set(existing.photos.map((photo) => photo.id));
-    for (const photo of day.photos) {
-      if (!seen.has(photo.id)) existing.photos.push(photo);
-    }
+    existing.photos = dropCopies(existing.photos.concat(day.photos));
     existing.photos.sort((a, b) => a.taken_at.localeCompare(b.taken_at) || a.id.localeCompare(b.id));
   }
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
@@ -433,7 +460,7 @@ async function loadFresh(extra) {
     state.textSearch = Boolean(params.get("q"));
     remember(params);
     const page = await fetchJson("/api/timeline?" + params.toString());
-    state.days = page.groups;
+    state.days = page.groups.map((day) => ({ ...day, photos: dropCopies(day.photos) }));
     state.olderCursor = page.older_cursor;
     state.newerCursor = page.newer_cursor;
     measure();
