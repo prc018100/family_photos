@@ -41,7 +41,8 @@ button, input, select {
 
 header {
   min-width: 0;
-  padding: 14px 18px 12px;
+  position: relative;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--line);
   background: var(--bg);
 }
@@ -92,9 +93,10 @@ h1 {
   font-weight: 650;
 }
 
+/* Filters fold away on every screen so the collage gets the height. */
 #filter-toggle {
-  display: none;
-  margin-top: 10px;
+  display: inline-flex;
+  align-self: center;
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
@@ -103,11 +105,25 @@ h1 {
 }
 
 #filters {
-  display: grid;
+  display: none;
   grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr)) repeat(2, 150px) auto;
   gap: 10px 12px;
   align-items: end;
   margin-top: 12px;
+}
+
+#filters.open {
+  display: grid;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  margin: 0;
+  padding: 12px 18px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
 }
 
 #filters label {
@@ -284,7 +300,7 @@ h1 {
 
 .day.is-new-year .day-label .year { font-size: 1.4rem; }
 
-/* The collage band: five inches tall on a normal screen. */
+/* The collage band: up to seven and a half inches tall. */
 .band {
   display: flex;
   gap: var(--gap);
@@ -443,39 +459,8 @@ dialog::backdrop { background: rgba(8, 6, 4, 0.88); }
 @media (max-width: 720px) {
   header { padding: 12px; }
   h1 { font-size: 1.45rem; }
-  .focus {
-  display: inline-flex;
-  margin-left: auto;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-  font-family: system-ui, sans-serif;
-  font-size: 0.85rem;
-}
-
-.focus button {
-  background: transparent;
-  border: 0;
-  padding: 7px 14px;
-  min-height: 36px;
-  cursor: pointer;
-  color: var(--muted);
-}
-
-.focus button[aria-pressed="true"] {
-  background: var(--amber);
-  color: var(--amber-ink);
-  font-weight: 650;
-}
-
-#filter-toggle { display: inline-flex; }
-  #filters { display: none; }
   #filters.open {
-    display: grid;
     grid-template-columns: 1fr 1fr;
-    position: relative;
-    z-index: 2;
-    background: var(--bg);
     max-height: 62vh;
     overflow: auto;
     padding-bottom: 8px;
