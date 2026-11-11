@@ -111,3 +111,13 @@ def test_bad_cursor_is_rejected():
     with TestClient(app) as client:
         response = client.get("/api/timeline", params={"cursor": "%%%"})
         assert response.status_code == 400
+
+
+def test_index_versions_static_assets_so_browsers_refetch_them():
+    from app.main import _ASSET_VERSION
+
+    app = create_app(_settings(), FakeImmich())
+    with TestClient(app) as http:
+        page = http.get("/")
+    assert f"/static/timeline.js?v={_ASSET_VERSION}" in page.text
+    assert f"/static/timeline.css?v={_ASSET_VERSION}" in page.text

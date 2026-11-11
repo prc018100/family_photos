@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import re
 import secrets
@@ -28,6 +29,18 @@ templates = Jinja2Templates(directory=PACKAGE / "templates")
 _UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 _IMAGE_CACHE = "private, max-age=86400"
+
+
+def _asset_version() -> str:
+    """Changes whenever the script or stylesheet does, so browsers refetch them."""
+
+    digest = hashlib.sha256()
+    for name in ("timeline.js", "timeline.css"):
+        digest.update((PACKAGE / "static" / name).read_bytes())
+    return digest.hexdigest()[:12]
+
+
+_ASSET_VERSION = _asset_version()
 _NO_STORE = "no-store"
 
 
@@ -94,6 +107,7 @@ def create_app(settings: Settings | None = None, immich: ImmichClient | None = N
             request,
             "index.html",
             {
+                "asset_version": _ASSET_VERSION,
                 "boot": {
                     "configured": bool(settings_.immich_api_key),
                     "publicUrl": settings_.immich_public_url,

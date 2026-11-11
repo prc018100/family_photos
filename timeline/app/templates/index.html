@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="dark">
   <title>Family Photos</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/timeline.css">
+  <link rel="stylesheet" href="/static/timeline.css?v={{ asset_version }}">
 </head>
 <body>
   <header>
@@ -92,7 +92,7 @@
   </dialog>
 
   <script id="boot" type="application/json">{{ boot | tojson }}</script>
-  <script src="/static/timeline.js"></script>
+  <script src="/static/timeline.js?v={{ asset_version }}"></script>
   <noscript><p class="banner">This timeline needs JavaScript to scroll through the photos.</p></noscript>
 </body>
 </html>
