@@ -33,6 +33,37 @@ def _place(value: object) -> str | None:
     return text or None
 
 
+# EXIF orientations that turn the sensor frame on its side, in the spellings
+# Immich has stored over the years.
+_SIDEWAYS = {"5", "6", "7", "8", "90", "-90", "270", "-270"}
+
+
+def _positive(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def display_ratio(raw: dict, exif: dict) -> float | None:
+    """Width over height the way the photo is shown, or None when unknown."""
+
+    width = _positive(exif.get("exifImageWidth"))
+    height = _positive(exif.get("exifImageHeight"))
+    if width and height:
+        if str(exif.get("orientation") or "").strip() in _SIDEWAYS:
+            width, height = height, width
+    else:
+        width = _positive(raw.get("width"))
+        height = _positive(raw.get("height"))
+    if not width or not height:
+        return None
+    return round(min(4.0, max(0.25, width / height)), 4)
+
+
 def parse_asset(raw: dict) -> Photo | None:
     asset_id = raw.get("id")
     if not isinstance(asset_id, str) or not asset_id:
@@ -62,6 +93,7 @@ def parse_asset(raw: dict) -> Photo | None:
         filename=str(raw.get("originalFileName") or ""),
         type=str(kind),
         live=bool(raw.get("livePhotoVideoId")),
+        ratio=display_ratio(raw, exif),
     )
 
 

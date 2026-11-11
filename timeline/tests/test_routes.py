@@ -72,6 +72,7 @@ def test_timeline_proxies_thumbnails_and_never_asks_for_originals():
         payload = client.get("/api/timeline").json()
         photo_json = payload["groups"][0]["photos"][0]
         assert photo_json["thumbnail_url"] == f"/media/assets/{ASSET}?size=thumbnail"
+        assert "ratio" in photo_json
         assert photo_json["immich_url"] == f"http://photos.example:2283/photos/{ASSET}"
         assert "server-side-key" not in client.get("/api/timeline").text
         assert payload["bounds"] == {"earliest": "2019-07-04", "latest": "2019-07-04"}

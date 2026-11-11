@@ -24,6 +24,9 @@ class Photo:
     filename: str
     type: str
     live: bool
+    # Width over height as displayed (EXIF rotation applied). None when Immich
+    # did not record the size; the browser then measures the thumbnail.
+    ratio: float | None = None
 
     @property
     def taken_on(self) -> date:

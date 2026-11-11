@@ -36,10 +36,12 @@ The rest of this file is the detail behind those two commands.
 ## What the timeline does
 
 - Photos are grouped by the camera's local day, then by month and year. Scrolling is horizontal. Only the columns near the viewport are in the DOM, and more days load as you approach either end.
+- The collage band is five inches tall (480 CSS pixels, less on a short window). Each column stacks one to three photos at their own shape, so portraits and landscapes pack together without cropping. The shape comes from Immich's EXIF size and rotation; if the thumbnail disagrees, the browser trusts the thumbnail.
+- **With people** (the default) shows every photo with a recognized person, plus about one scenery shot for every four of those, and up to two scenery shots on a day with no faces. A photo with people is never squeezed into a three-high stack. **All photos** shows everything. The choice is remembered per browser, and `?focus=all` in the URL forces it. Word searches always show every result, because smart search does not return people.
 - The range under the strip scrubs from the earliest matching photo to the latest. "Go" jumps to a date. The chosen day sits at the left edge.
 - Filters combine. People are AND (Mom and Dad means both). City, state, and country are the names Immich stored. From/To are inclusive local dates. Words ("beach") go to Immich's smart search and are ranked, then shown in date order. Smart search returns the top 200 matches, not the whole library. Person, place, and date browsing pages through everything.
 - A photo opens larger, with its people, place, and date, and a link to that asset in Immich (`/photos/<id>`). Videos show the preview frame. Playback stays in Immich.
-- Collage tiles are Immich thumbnails. The large view is the Immich preview. `/media/...` is this service, proxying those renditions with the API key. `size=original` and `size=fullsize` are rejected, including when Immich would redirect a thumbnail request at the original file.
+- Small collage tiles are Immich thumbnails; tiles bigger than a thumbnail use the preview so they stay sharp. The large view is the Immich preview. `/media/...` is this service, proxying those renditions with the API key. `size=original` and `size=fullsize` are rejected, including when Immich would redirect a thumbnail request at the original file.
 
 Example: Mom at the beach in summer 2019. Select Mom, set From `2019-06-01` and To `2019-08-31`, type `beach`, and press Show. If Immich has a city for that trip, you can set the city instead of, or as well as, the word.
 

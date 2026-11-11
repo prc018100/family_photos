@@ -67,6 +67,31 @@ h1 {
   font-weight: 500;
 }
 
+.focus {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+}
+
+.focus button {
+  background: transparent;
+  border: 0;
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.focus button[aria-pressed="true"] {
+  background: var(--amber);
+  color: var(--amber-ink);
+  font-weight: 650;
+}
+
 #filter-toggle {
   display: none;
   margin-top: 10px;
@@ -225,58 +250,63 @@ h1 {
 
 .day {
   display: flex;
-  align-items: center;
-  gap: var(--gap);
+  flex-direction: column;
+  justify-content: center;
   height: 100%;
-  box-sizing: border-box;
   padding-right: var(--day-gap);
   flex: 0 0 auto;
 }
 
 .day-label {
-  width: var(--label);
-  flex: 0 0 var(--label);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: var(--label-h);
+  margin: 0;
+  padding-left: 2px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.day-label .year {
-  margin: 0;
-  color: var(--amber);
-  font-size: 1.15rem;
-}
-
-.day.is-new-year .year { font-size: 1.7rem; }
-
-.day-label .weekday,
-.day-label .month {
-  margin: 0;
+.day-label .when {
   color: var(--muted);
   font-family: system-ui, sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.day-label .daynum {
-  margin: 0;
-  font-size: 2.4rem;
-  line-height: 1;
+.day-label .year {
+  color: var(--amber);
+  font-size: 1.15rem;
 }
 
-.day-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(var(--rows), var(--tile));
-  grid-auto-columns: var(--tile);
+.day.is-new-year .day-label .year { font-size: 1.4rem; }
+
+/* The collage band: five inches tall on a normal screen. */
+.band {
+  display: flex;
   gap: var(--gap);
+  height: var(--band);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  flex: 0 0 auto;
+  height: 100%;
 }
 
 .tile {
   position: relative;
-  width: var(--tile);
-  height: var(--tile);
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
   background: var(--tile);
   cursor: pointer;
@@ -413,7 +443,32 @@ dialog::backdrop { background: rgba(8, 6, 4, 0.88); }
 @media (max-width: 720px) {
   header { padding: 12px; }
   h1 { font-size: 1.45rem; }
-  #filter-toggle { display: inline-flex; }
+  .focus {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+}
+
+.focus button {
+  background: transparent;
+  border: 0;
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.focus button[aria-pressed="true"] {
+  background: var(--amber);
+  color: var(--amber-ink);
+  font-weight: 650;
+}
+
+#filter-toggle { display: inline-flex; }
   #filters { display: none; }
   #filters.open {
     display: grid;
@@ -426,7 +481,8 @@ dialog::backdrop { background: rgba(8, 6, 4, 0.88); }
     padding-bottom: 8px;
   }
   .words, .people-row, .actions { grid-column: 1 / -1; }
-  .day-label .daynum { font-size: 1.8rem; }
+  .focus button { padding: 6px 10px; white-space: nowrap; }
+  .brand { flex-wrap: wrap; }
   .lightbox-frame { padding: 10px; }
   #scrub-readout { min-width: 7.5rem; font-size: 0.85rem; }
   .jump-row { flex-wrap: wrap; }

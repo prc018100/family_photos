@@ -19,6 +19,7 @@ def present_photo(photo: Photo, public_url: str) -> dict:
         "filename": photo.filename,
         "type": photo.type,
         "live": photo.live,
+        "ratio": photo.ratio,
         "thumbnail_url": f"/media/assets/{photo.id}?size=thumbnail",
         "preview_url": f"/media/assets/{photo.id}?size=preview",
         "immich_url": link,
