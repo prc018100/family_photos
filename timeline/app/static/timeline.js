@@ -24,10 +24,10 @@ const state = {
   edge: "latest",
 };
 
-// The collage band is five inches tall (CSS inches are 96px) unless the
+// The collage band is seven inches tall (CSS inches are 96px) unless the
 // window is shorter. Columns hold one to three photos stacked at their own
 // shape, so portraits and landscapes pack without cropping.
-const BAND = 480;
+const BAND = 672;
 const LABEL = 30;
 let layout = { band: BAND, gap: 6, dayGap: 18, minDay: 112 };
 let renderedKey = "";
