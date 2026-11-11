@@ -24,10 +24,10 @@ const state = {
   edge: "latest",
 };
 
-// The collage band is five inches tall (CSS inches are 96px) unless the
-// window is shorter. Columns hold one to three photos stacked at their own
+// The collage band grows to fill the window, up to seven and a half inches
+// (CSS inches are 96px). Columns hold one to three photos stacked at their own
 // shape, so portraits and landscapes pack without cropping.
-const BAND = 480;
+const BAND = 720;
 const LABEL = 30;
 let layout = { band: BAND, gap: 6, dayGap: 18, minDay: 112 };
 let renderedKey = "";
@@ -125,7 +125,7 @@ function dayWidth(index) {
 function measure() {
   const narrow = window.matchMedia("(max-width: 720px)").matches;
   const height = scroller.clientHeight || BAND + LABEL + 40;
-  const band = Math.max(200, Math.min(BAND, height - LABEL - 28));
+  const band = Math.max(200, Math.min(BAND, height - LABEL - 16));
   layout = {
     band,
     gap: narrow ? 4 : 6,
