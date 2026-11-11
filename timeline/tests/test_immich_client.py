@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.config import Settings
-from app.immich import ImmichClient, ImmichError, parse_asset, rejects_image_target
+from app.immich import ImmichClient, ImmichError, display_ratio, parse_asset, rejects_image_target
 from app.models import TimelineCriteria
 from tests.helpers import ASSET, MOM
 
@@ -39,6 +39,30 @@ def test_parse_asset_keeps_the_camera_clock_and_live_photo_flag():
     assert photo.filename == "IMG_2048.HEIC"
     assert photo.city == "Santa Cruz"
     assert photo.people[0].name == "Mom"
+
+
+def test_display_ratio_turns_sideways_photos_upright():
+    landscape = {"exifImageWidth": 4032, "exifImageHeight": 3024, "orientation": "1"}
+    portrait = {"exifImageWidth": 4032, "exifImageHeight": 3024, "orientation": "6"}
+    assert display_ratio({}, landscape) == pytest.approx(4 / 3, rel=1e-3)
+    assert display_ratio({}, portrait) == pytest.approx(3 / 4, rel=1e-3)
+    assert display_ratio({"width": 1080, "height": 1920}, {}) == pytest.approx(0.5625)
+    assert display_ratio({}, {}) is None
+    assert display_ratio({}, {"exifImageWidth": 0, "exifImageHeight": 100}) is None
+    assert display_ratio({}, {"exifImageWidth": 9000, "exifImageHeight": 100}) == 4.0
+
+
+def test_parse_asset_records_the_display_shape():
+    photo = parse_asset(
+        {
+            "id": ASSET,
+            "type": "IMAGE",
+            "localDateTime": "2019-07-14T15:30:45.804Z",
+            "exifInfo": {"exifImageWidth": 4000, "exifImageHeight": 3000, "orientation": "8"},
+        }
+    )
+    assert photo is not None
+    assert photo.ratio == pytest.approx(0.75)
 
 
 def test_rejects_original_and_fullsize_targets():

@@ -17,58 +17,133 @@ const state = {
   olderCursor: null,
   newerCursor: null,
   bounds: null,
+  layouts: [],
+  textSearch: false,
   busy: false,
   seen: new Set(),
   edge: "latest",
 };
 
-let layout = { rows: 2, gap: 8, dayGap: 22, label: 128, tile: 180 };
+// The collage band is five inches tall (CSS inches are 96px) unless the
+// window is shorter. Columns hold one to three photos stacked at their own
+// shape, so portraits and landscapes pack without cropping.
+const BAND = 480;
+const LABEL = 30;
+let layout = { band: BAND, gap: 6, dayGap: 18, minDay: 112 };
 let renderedKey = "";
 let scrubReady = false;
 let lightboxIndex = -1;
+let peopleFirst = readFocus();
+const measuredRatio = new Map();
+
+function readFocus() {
+  const fromUrl = new URLSearchParams(location.search).get("focus");
+  if (fromUrl === "all") return false;
+  if (fromUrl === "people") return true;
+  try {
+    return localStorage.getItem("timeline-focus") !== "all";
+  } catch (_error) {
+    return true;
+  }
+}
 
 function showBanner(text) {
   banner.hidden = !text;
   banner.textContent = text || "";
 }
 
-function columnWidth(count) {
-  const cols = Math.max(1, Math.ceil(count / layout.rows));
-  const grid = cols * layout.tile + Math.max(0, cols - 1) * layout.gap;
-  return layout.label + layout.gap + grid + layout.dayGap;
+function hasPeople(item) {
+  return Array.isArray(item.people) && item.people.length > 0;
 }
 
-function gridWidth(count) {
-  const cols = Math.max(1, Math.ceil(count / layout.rows));
-  return cols * layout.tile + Math.max(0, cols - 1) * layout.gap;
+function ratioOf(item) {
+  const raw = measuredRatio.get(item.id) || item.ratio || 1;
+  // Panoramas and very tall crops would swallow or vanish from a column.
+  return Math.min(2.2, Math.max(0.5, raw));
+}
+
+// People first: every photo with a recognized person, plus a few scenery
+// shots so a trip or a holiday without faces still shows up.
+function shownPhotos(day) {
+  if (!peopleFirst || state.textSearch) return day.photos;
+  const people = day.photos.filter(hasPeople);
+  const others = day.photos.filter((item) => !hasPeople(item));
+  const allowance = Math.min(others.length, people.length ? Math.floor(people.length / 4) : 2);
+  const keep = new Set(people.map((item) => item.id));
+  if (allowance > 0) {
+    const step = others.length / allowance;
+    for (let index = 0; index < allowance; index += 1) {
+      keep.add(others[Math.floor(index * step + step / 2)].id);
+    }
+  }
+  return day.photos.filter((item) => keep.has(item.id));
+}
+
+function packColumns(photos) {
+  const height = layout.band;
+  const gap = layout.gap;
+  const target = height * 0.62;
+  const columns = [];
+  let index = 0;
+  while (index < photos.length) {
+    let best = null;
+    let inverse = 0;
+    for (let count = 1; count <= 3 && index + count <= photos.length; count += 1) {
+      const item = photos[index + count - 1];
+      inverse += 1 / ratioOf(item);
+      const width = (height - gap * (count - 1)) / inverse;
+      const slice = photos.slice(index, index + count);
+      // Faces stay big: a photo with people never lands in a three-high stack.
+      if (count === 3 && slice.some(hasPeople)) break;
+      let score = Math.abs(Math.log(width / target));
+      if (!best || score < best.score) best = { count, width, score };
+    }
+    const items = photos.slice(index, index + best.count);
+    columns.push({ width: Math.round(best.width), items });
+    index += best.count;
+  }
+  return columns;
+}
+
+function layoutDay(day) {
+  const shown = shownPhotos(day);
+  const columns = packColumns(shown);
+  const grid = columns.reduce((sum, column) => sum + column.width, 0) + Math.max(0, columns.length - 1) * layout.gap;
+  return { shown, columns, grid, width: Math.max(grid, layout.minDay) + layout.dayGap };
+}
+
+function dayWidth(index) {
+  return state.layouts[index].width;
 }
 
 function measure() {
   const narrow = window.matchMedia("(max-width: 720px)").matches;
-  const height = scroller.clientHeight || 480;
-  // One row keeps the date beside the pictures. A day with many photos grows wider.
-  const rows = 1;
-  const gap = narrow ? 8 : 10;
-  const dayGap = narrow ? 16 : 28;
-  const label = narrow ? 88 : 132;
-  const available = Math.max(160, height - 36);
-  const tile = Math.max(160, Math.min(available, narrow ? 280 : 460));
-  layout = { rows, gap, dayGap, label, tile };
-  strip.style.setProperty("--rows", String(rows));
-  strip.style.setProperty("--gap", gap + "px");
-  strip.style.setProperty("--day-gap", dayGap + "px");
-  strip.style.setProperty("--label", label + "px");
-  strip.style.setProperty("--tile", tile + "px");
+  const height = scroller.clientHeight || BAND + LABEL + 40;
+  const band = Math.max(200, Math.min(BAND, height - LABEL - 28));
+  layout = {
+    band,
+    gap: narrow ? 4 : 6,
+    dayGap: narrow ? 12 : 18,
+    minDay: narrow ? 96 : 112,
+  };
+  strip.style.setProperty("--band", band + "px");
+  strip.style.setProperty("--gap", layout.gap + "px");
+  strip.style.setProperty("--day-gap", layout.dayGap + "px");
+  strip.style.setProperty("--label-h", LABEL + "px");
 }
 
 function layoutStrip() {
   const prefix = [];
+  const layouts = [];
   let total = 0;
   for (const day of state.days) {
+    const placed = layoutDay(day);
     prefix.push(total);
-    total += columnWidth(day.photos.length);
+    layouts.push(placed);
+    total += placed.width;
   }
   state.prefix = prefix;
+  state.layouts = layouts;
   state.total = total;
   strip.style.width = Math.max(total, 1) + "px";
   empty.hidden = state.days.length !== 0;
@@ -93,12 +168,11 @@ function mergeDays(current, incoming) {
 }
 
 function anchorAtScroll() {
-  if (!state.days.length) return null;
+  if (!state.days.length || !state.layouts.length) return null;
   const x = scroller.scrollLeft;
   for (let index = 0; index < state.days.length; index += 1) {
     const start = state.prefix[index];
-    const width = columnWidth(state.days[index].photos.length);
-    if (x < start + width) return { key: state.days[index].key, offset: x - start };
+    if (x < start + dayWidth(index)) return { key: state.days[index].key, offset: x - start };
   }
   const last = state.days.length - 1;
   return { key: state.days[last].key, offset: 0 };
@@ -108,7 +182,7 @@ function restoreAnchor(anchor) {
   if (!anchor) return;
   const index = state.days.findIndex((day) => day.key === anchor.key);
   if (index < 0) return;
-  scroller.scrollLeft = state.prefix[index] + anchor.offset;
+  scroller.scrollLeft = state.prefix[index] + Math.min(anchor.offset, dayWidth(index));
 }
 
 function visibleIndexes() {
@@ -117,7 +191,7 @@ function visibleIndexes() {
   const indexes = [];
   for (let index = 0; index < state.days.length; index += 1) {
     const start = state.prefix[index];
-    const end = start + columnWidth(state.days[index].photos.length);
+    const end = start + dayWidth(index);
     if (end >= left && start <= right) indexes.push(index);
   }
   return indexes;
@@ -125,45 +199,81 @@ function visibleIndexes() {
 
 function renderDay(index) {
   const day = state.days[index];
+  const placed = state.layouts[index];
+  const newYear = index === 0 || day.year !== state.days[index - 1].year;
   const column = document.createElement("section");
-  column.className = "day" + (index === 0 || day.year !== state.days[index - 1].year ? " is-new-year" : "");
-  column.style.width = columnWidth(day.photos.length) + "px";
+  column.className = "day" + (newYear ? " is-new-year" : "");
+  column.style.width = placed.width + "px";
 
-  const label = document.createElement("div");
+  const label = document.createElement("h2");
   label.className = "day-label";
-  const year = document.createElement("p");
-  year.className = "year";
-  year.textContent = String(day.year);
-  const weekday = document.createElement("p");
-  weekday.className = "weekday";
-  weekday.textContent = day.weekday;
-  const daynum = document.createElement("p");
-  daynum.className = "daynum";
-  daynum.textContent = String(Number(day.key.slice(8)));
-  const month = document.createElement("p");
-  month.className = "month";
-  month.textContent = day.month_label.replace(` ${day.year}`, "");
-  label.append(year, weekday, daynum, month);
+  const when = document.createElement("span");
+  when.className = "when";
+  const month = day.month_label.replace(` ${day.year}`, "").slice(0, 3);
+  when.textContent = `${day.weekday.slice(0, 3)} ${month} ${Number(day.key.slice(8))}`;
+  label.append(when);
+  if (newYear || day.show_year) {
+    const year = document.createElement("span");
+    year.className = "year";
+    year.textContent = String(day.year);
+    label.prepend(year);
+  }
 
-  const grid = document.createElement("div");
-  grid.className = "day-grid";
-  grid.style.width = gridWidth(day.photos.length) + "px";
-  for (const item of day.photos) grid.append(renderTile(item, day));
+  const band = document.createElement("div");
+  band.className = "band";
+  band.style.width = placed.grid + "px";
+  for (const stack of placed.columns) {
+    const holder = document.createElement("div");
+    holder.className = "stack";
+    holder.style.width = stack.width + "px";
+    for (const item of stack.items) {
+      const cellHeight = (stack.width / ratioOf(item));
+      holder.append(renderTile(item, day, stack.width, cellHeight));
+    }
+    band.append(holder);
+  }
 
-  column.append(label, grid);
+  column.append(label, band);
   return column;
 }
 
-function renderTile(item, day) {
+let relayoutTimer = 0;
+function relayoutSoon() {
+  clearTimeout(relayoutTimer);
+  relayoutTimer = setTimeout(() => {
+    const anchor = anchorAtScroll();
+    layoutStrip();
+    restoreAnchor(anchor);
+    renderedKey = "";
+    renderSlice();
+  }, 180);
+}
+
+function renderTile(item, day, width, height) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "tile";
+  button.className = "tile" + (hasPeople(item) ? " has-people" : "");
+  // Scaled up: a lone tile with a grow factor under 1 would not fill its column.
+  button.style.flexGrow = String(100 / ratioOf(item));
   const image = document.createElement("img");
-  image.src = item.thumbnail_url;
-  image.alt = [item.filename || "Photo", day.label, item.live ? "Live Photo" : "", item.type === "VIDEO" ? "Video" : ""]
+  // Thumbnails are about 250px on the short side. Bigger cells get the preview.
+  const short = Math.min(width, height) * (window.devicePixelRatio || 1);
+  image.src = short > 320 ? item.preview_url : item.thumbnail_url;
+  const names = (item.people || []).map((person) => person.name.trim()).filter(Boolean);
+  image.alt = [names.join(", ") || item.filename || "Photo", day.label, item.live ? "Live Photo" : "", item.type === "VIDEO" ? "Video" : ""]
     .filter(Boolean)
     .join(", ");
   image.decoding = "async";
+  image.loading = "lazy";
+  image.addEventListener("load", () => {
+    if (!image.naturalWidth || !image.naturalHeight || measuredRatio.has(item.id)) return;
+    const actual = image.naturalWidth / image.naturalHeight;
+    // Trust the pixels when Immich's recorded size disagrees (or is missing).
+    if (!item.ratio || Math.abs(Math.log(actual / item.ratio)) > 0.1) {
+      measuredRatio.set(item.id, actual);
+      relayoutSoon();
+    }
+  });
   button.append(image);
   if (item.live || item.type === "VIDEO") {
     const badge = document.createElement("span");
@@ -182,7 +292,7 @@ function renderSlice() {
     return;
   }
   const indexes = visibleIndexes();
-  const key = indexes.join(",") + ":" + layout.tile + ":" + layout.rows + ":" + state.days.length;
+  const key = indexes.join(",") + ":" + layout.band + ":" + state.days.length + ":" + state.total;
   if (key === renderedKey) return;
   renderedKey = key;
   if (!indexes.length) return;
@@ -193,13 +303,14 @@ function renderSlice() {
   left.style.width = state.prefix[first] + "px";
   const right = document.createElement("div");
   right.className = "spacer";
-  const lastEnd = state.prefix[last] + columnWidth(state.days[last].photos.length);
+  const lastEnd = state.prefix[last] + dayWidth(last);
   right.style.width = Math.max(0, state.total - lastEnd) + "px";
   const columns = indexes.map(renderDay);
   strip.replaceChildren(left, ...columns, right);
 }
 
 function flatPhotos() {
+  if (state.layouts.length === state.days.length) return state.layouts.flatMap((placed) => placed.shown);
   return state.days.flatMap((day) => day.photos);
 }
 
@@ -301,6 +412,7 @@ function remember(params) {
   const visible = new URLSearchParams(params);
   visible.delete("edge");
   visible.delete("cursor");
+  if (!peopleFirst) visible.set("focus", "all");
   const next = visible.toString();
   history.replaceState(null, "", next ? `?${next}` : location.pathname);
 }
@@ -318,6 +430,7 @@ async function loadFresh(extra) {
   showBanner("");
   try {
     const params = paramsFromForm(extra);
+    state.textSearch = Boolean(params.get("q"));
     remember(params);
     const page = await fetchJson("/api/timeline?" + params.toString());
     state.days = page.groups;
@@ -564,9 +677,9 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     stepLightbox(-1);
   } else if (event.key === "ArrowRight") {
-    scroller.scrollLeft += layout.tile;
+    scroller.scrollLeft += layout.band;
   } else if (event.key === "ArrowLeft") {
-    scroller.scrollLeft -= layout.tile;
+    scroller.scrollLeft -= layout.band;
   }
 });
 
@@ -628,7 +741,39 @@ dialog.addEventListener("close", () => {
   history.replaceState(null, "", url);
 });
 
+function paintFocus() {
+  for (const button of document.querySelectorAll("#focus button")) {
+    const active = (button.dataset.focus === "people") === peopleFirst;
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+}
+
+document.getElementById("focus").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-focus]");
+  if (!button) return;
+  const next = button.dataset.focus === "people";
+  if (next === peopleFirst) return;
+  peopleFirst = next;
+  try {
+    localStorage.setItem("timeline-focus", next ? "people" : "all");
+  } catch (_error) {
+    // Private windows can refuse storage. The URL still carries the choice.
+  }
+  paintFocus();
+  const url = new URL(location.href);
+  if (next) url.searchParams.delete("focus");
+  else url.searchParams.set("focus", "all");
+  history.replaceState(null, "", url);
+  const anchor = anchorAtScroll();
+  layoutStrip();
+  restoreAnchor(anchor);
+  renderedKey = "";
+  renderSlice();
+  maybeLoadMore();
+});
+
 async function start() {
+  paintFocus();
   measure();
   if (!boot.configured) {
     showBanner("Set IMMICH_API_KEY and recreate the timeline container. Create the key in Immich under Account settings → API Keys.");
