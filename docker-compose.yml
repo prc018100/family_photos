@@ -1,9 +1,9 @@
 # Family photo stack.
 #
 # Immich server, machine learning, Valkey, and Postgres are the upstream
-# v3.3.5 Compose file, pinned and adjusted for a Fedora host that runs rootful
+# v3.4.0 Compose file, pinned and adjusted for a Fedora host that runs rootful
 # Docker with SELinux enforcing:
-#   https://github.com/immich-app/immich/releases/download/v3.3.5/docker-compose.yml
+#   https://github.com/immich-app/immich/releases/download/v3.4.0/docker-compose.yml
 #
 # :Z on a bind mount gives that container a private label. Do not put
 # :Z on /etc/localtime (that relabels the host clock file). The iCloud
@@ -18,7 +18,7 @@ name: family-photos
 services:
   immich-server:
     container_name: family_photos_immich_server
-    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3.3.5}
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v3.4.0}
     # CPU transcoding is the default. For Quick Sync, VAAPI, or NVENC, download
     # hwaccel.transcoding.yml from the same Immich tag and uncomment:
     # extends:
@@ -62,9 +62,9 @@ services:
   immich-machine-learning:
     container_name: family_photos_immich_ml
     # CPU build. For a GPU or NPU, change the tag suffix and the extends
-    # service together, for example ${IMMICH_VERSION:-v3.3.5}-openvino
+    # service together, for example ${IMMICH_VERSION:-v3.4.0}-openvino
     # and service: openvino. Model names: armnn, cuda, rocm, openvino, rknn.
-    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v3.3.5}
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v3.4.0}
     # extends:
     #   file: hwaccel.ml.yml
     #   service: cpu
@@ -83,7 +83,7 @@ services:
 
   redis:
     container_name: family_photos_redis
-    image: docker.io/valkey/valkey:9@sha256:c123e3715db63d06d4ad6964884037aa0d5d4d703939b9929954112889708e1d
+    image: docker.io/valkey/valkey:9@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd
     healthcheck:
       test: redis-cli ping | grep -q PONG || exit 1
     restart: unless-stopped
