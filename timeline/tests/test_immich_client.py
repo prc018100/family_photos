@@ -65,6 +65,14 @@ def test_parse_asset_records_the_display_shape():
     assert photo.ratio == pytest.approx(0.75)
 
 
+def test_parse_asset_skips_photos_hidden_under_a_stack():
+    base = {"type": "IMAGE", "localDateTime": "2019-07-14T15:30:45.804Z"}
+    top = parse_asset({**base, "id": ASSET, "stack": {"primaryAssetId": ASSET, "assetCount": 2}})
+    hidden = parse_asset({**base, "id": MOM, "stack": {"primaryAssetId": ASSET, "assetCount": 2}})
+    assert top is not None and top.moment == "2019-07-14T15:30:45.804Z"
+    assert hidden is None
+
+
 def test_rejects_original_and_fullsize_targets():
     assert rejects_image_target(f"{IMMICH}/api/assets/{ASSET}/original")
     assert rejects_image_target(f"{IMMICH}/api/assets/{ASSET}/thumbnail?size=original")

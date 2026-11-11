@@ -92,3 +92,17 @@ def test_presented_photo_uses_proxied_renditions():
     assert "api-key" not in str(body)
     assert "original" not in body["thumbnail_url"]
     assert body["taken_at"] == "2019-07-04T15:30:00"
+
+
+def test_drop_copies_keeps_one_asset_per_shot_and_prefers_tagged_faces():
+    from app.grouping import drop_copies
+    from app.models import PersonRef
+    from tests.helpers import DAD, MOM, photo
+
+    moment = "2019-07-04T15:30:00.123Z"
+    bare = photo(id="a", people=(), ratio=0.75, moment=moment)
+    tagged = photo(id="b", people=(PersonRef(MOM, "Mom"), PersonRef(DAD, "Dad")), ratio=0.75, moment=moment)
+    sideways = photo(id="c", people=(), ratio=1.33, moment=moment)
+    burst = photo(id="d", people=(), ratio=0.75, moment="2019-07-04T15:30:00.456Z")
+    kept = drop_copies([bare, tagged, sideways, burst])
+    assert [item.id for item in kept] == ["b", "c", "d"]
