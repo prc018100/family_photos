@@ -1,6 +1,6 @@
 # Family Photos
 
-[Immich](https://github.com/immich-app/immich) v3.3.5 holds the pictures. The timeline on port 2284 is the page the family scrolls. Photos stay in iCloud, and this server copies new ones in every hour.
+[Immich](https://github.com/immich-app/immich) v3.4.0 holds the pictures. The timeline on port 2284 is the page the family scrolls. Photos stay in iCloud, and this server copies new ones in every hour.
 
 ```bash
 ./setup.sh
@@ -179,7 +179,7 @@ docker run --rm -it \
   -v /path/on/the/host:/import:ro,Z \
   -e IMMICH_INSTANCE_URL=http://<server>:2283/api \
   -e IMMICH_API_KEY=<the same key> \
-  ghcr.io/immich-app/immich-cli:v3.3.5 \
+  ghcr.io/immich-app/immich-cli:v3.4.0 \
   upload --recursive --dry-run /import
 ```
 
@@ -238,7 +238,7 @@ There is no account on the timeline. If you can open the port, you can see the l
 
 Machine learning defaults to CPU. That is the image tag with no suffix, and it is what you should run until the library is importing cleanly.
 
-For an Intel iGPU, which is the usual Fedora desktop chip, Immich's OpenVINO or Quick Sync path is the one to read: [ML hardware acceleration](https://docs.immich.app/features/ml-hardware-acceleration). Download `hwaccel.ml.yml` and `hwaccel.transcoding.yml` from the **v3.3.5** tag into this directory (the same tag as `IMMICH_VERSION`). Uncomment the `extends` block on `immich-machine-learning` and, for the ML image, append the matching suffix (`-openvino`, `-cuda`, `-rocm`, `-armnn`, `-rknn`). Do the transcoding file separately if you also want GPU video transcode. A hwaccel file from a newer Immich tag does not belong with this pin.
+For an Intel iGPU, which is the usual Fedora desktop chip, Immich's OpenVINO or Quick Sync path is the one to read: [ML hardware acceleration](https://docs.immich.app/features/ml-hardware-acceleration). Download `hwaccel.ml.yml` and `hwaccel.transcoding.yml` from the **v3.4.0** tag into this directory (the same tag as `IMMICH_VERSION`). Uncomment the `extends` block on `immich-machine-learning` and, for the ML image, append the matching suffix (`-openvino`, `-cuda`, `-rocm`, `-armnn`, `-rknn`). Do the transcoding file separately if you also want GPU video transcode. A hwaccel file from a newer Immich tag does not belong with this pin.
 
 NVIDIA needs the NVIDIA container toolkit installed on the host before the `cuda` image will see the GPU.
 
@@ -261,7 +261,7 @@ If the other cards use an icon name instead of an emoji, use that same style. `ð
 
 ## Upgrade the pin
 
-`IMMICH_VERSION` is `v3.3.5` on purpose. Read the Immich release notes, dump the database, then move the pin:
+`IMMICH_VERSION` is `v3.4.0` on purpose. Read the Immich release notes, dump the database, then move the pin:
 
 ```bash
 docker exec family_photos_postgres pg_dump -U postgres immich > immich-backup.sql
