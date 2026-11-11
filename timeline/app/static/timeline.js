@@ -24,11 +24,10 @@ const state = {
   edge: "latest",
 };
 
-// The collage band grows to fill the window, up to seven and a half inches
-// (CSS inches are 96px). Columns hold one to three photos stacked at their own
+// The collage band fills the window top to bottom. Search, filters and the
+// date controls live in the corner menu. Columns hold one to three photos stacked at their own
 // shape, so portraits and landscapes pack without cropping.
 const BAND = 720;
-const LABEL = 30;
 let layout = { band: BAND, gap: 6, dayGap: 18, minDay: 112 };
 let renderedKey = "";
 let scrubReady = false;
@@ -124,18 +123,18 @@ function dayWidth(index) {
 
 function measure() {
   const narrow = window.matchMedia("(max-width: 720px)").matches;
-  const height = scroller.clientHeight || BAND + LABEL + 40;
-  const band = Math.max(200, Math.min(BAND, height - LABEL - 16));
+  const height = scroller.clientHeight || window.innerHeight || BAND;
+  const edge = narrow ? 6 : 10;
+  const band = Math.max(200, height - edge * 2);
   layout = {
     band,
     gap: narrow ? 4 : 6,
-    dayGap: narrow ? 12 : 18,
+    dayGap: narrow ? 6 : 10,
     minDay: narrow ? 96 : 112,
   };
   strip.style.setProperty("--band", band + "px");
   strip.style.setProperty("--gap", layout.gap + "px");
   strip.style.setProperty("--day-gap", layout.dayGap + "px");
-  strip.style.setProperty("--label-h", LABEL + "px");
 }
 
 function layoutStrip() {
@@ -712,8 +711,7 @@ document.addEventListener("keydown", (event) => {
 
 filters.addEventListener("submit", (event) => {
   event.preventDefault();
-  filters.classList.remove("open");
-  document.getElementById("filter-toggle").setAttribute("aria-expanded", "false");
+  closeMenu();
   loadFresh({ edge: "latest" });
 });
 
@@ -729,10 +727,27 @@ document.getElementById("clear").addEventListener("click", () => {
   loadFresh({ edge: "latest" });
 });
 
-document.getElementById("filter-toggle").addEventListener("click", () => {
-  const open = filters.classList.toggle("open");
-  document.getElementById("filter-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+const menu = document.getElementById("menu");
+const menuToggle = document.getElementById("menu-toggle");
+
+function openMenu() {
+  menu.hidden = false;
+  menuToggle.setAttribute("aria-expanded", "true");
+  document.getElementById("q").focus({ preventScroll: true });
+}
+
+function closeMenu() {
+  if (menu.hidden) return;
+  menu.hidden = true;
+  menuToggle.setAttribute("aria-expanded", "false");
+}
+
+menuToggle.addEventListener("click", () => (menu.hidden ? openMenu() : closeMenu()));
+document.getElementById("menu-close").addEventListener("click", closeMenu);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !menu.hidden && !dialog.open) closeMenu();
 });
+scroller.addEventListener("pointerdown", closeMenu);
 
 document.getElementById("person-filter").addEventListener("input", (event) => {
   const query = event.target.value.trim().toLowerCase();
@@ -747,12 +762,14 @@ scrub.addEventListener("change", () => {
   if (!scrubReady || scrub.disabled) return;
   const date = scrubDate();
   document.getElementById("jump-date").value = date;
+  closeMenu();
   loadFresh({ jump: date });
 });
 
 document.getElementById("jump").addEventListener("click", () => {
   const date = document.getElementById("jump-date").value;
   if (!date) return;
+  closeMenu();
   loadFresh({ jump: date });
 });
 

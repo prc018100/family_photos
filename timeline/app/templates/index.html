@@ -10,15 +10,28 @@
   <link rel="stylesheet" href="/static/timeline.css?v={{ asset_version }}">
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <p class="eyebrow">Family library</p>
-      <h1>Photos</h1>
-      <button type="button" id="filter-toggle" aria-expanded="false" aria-controls="filters">Filters</button>
-      <div id="focus" class="focus" role="group" aria-label="Which photos to show">
-        <button type="button" data-focus="people" aria-pressed="true">With people</button>
-        <button type="button" data-focus="all" aria-pressed="false">All photos</button>
-      </div>
+  <div id="stage">
+    <div id="scroller" tabindex="0" aria-label="Photo timeline">
+      <div id="strip"></div>
+    </div>
+    <p id="empty" class="empty" hidden>No photos in this window.</p>
+  </div>
+
+  <div class="corner">
+    <p id="banner" class="banner" hidden></p>
+    <button type="button" id="menu-toggle" aria-expanded="false" aria-controls="menu" aria-label="Search and options">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+  </div>
+
+  <aside id="menu" class="menu" hidden aria-label="Search and options">
+    <div class="menu-head">
+      <h1>Family photos</h1>
+      <button type="button" id="menu-close">Close</button>
+    </div>
+    <div id="focus" class="focus" role="group" aria-label="Which photos to show">
+      <button type="button" data-focus="people" aria-pressed="true">With people</button>
+      <button type="button" data-focus="all" aria-pressed="false">All photos</button>
     </div>
     <form id="filters">
       <div class="words">
@@ -56,17 +69,7 @@
         <p id="unnamed" class="hint"></p>
       </div>
     </form>
-    <p id="banner" class="banner" hidden></p>
-  </header>
-
-  <div id="stage">
-    <div id="scroller" tabindex="0" aria-label="Photo timeline">
-      <div id="strip"></div>
-    </div>
-    <p id="empty" class="empty" hidden>No photos in this window.</p>
-  </div>
-
-  <footer>
+    <div class="menu-time">
     <div class="scrub-row">
       <label class="scrub-label" for="scrub">Date</label>
       <input id="scrub" type="range" min="0" max="0" value="0" disabled aria-valuetext="No photos yet">
@@ -78,7 +81,8 @@
       <button type="button" id="jump">Go</button>
       <p class="hint">Opens on the newest match. Drag the line or jump to land on another day.</p>
     </div>
-  </footer>
+    </div>
+  </aside>
 
   <dialog id="lightbox" aria-label="Photo">
     <div class="lightbox-frame">
