@@ -22,10 +22,6 @@ html, body {
 }
 
 body {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 100%;
   overflow: hidden;
 }
 
@@ -39,38 +35,9 @@ button, input, select {
   outline-offset: 2px;
 }
 
-header {
-  min-width: 0;
-  position: relative;
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-}
-
-.brand {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--amber);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-family: system-ui, sans-serif;
-  font-size: 0.72rem;
-}
-
-h1 {
-  margin: 0;
-  font-size: 1.8rem;
-  font-weight: 500;
-}
-
 .focus {
   display: inline-flex;
-  margin-left: auto;
+  align-self: flex-start;
   border: 1px solid var(--line);
   border-radius: 999px;
   overflow: hidden;
@@ -93,38 +60,14 @@ h1 {
   font-weight: 650;
 }
 
-/* Filters fold away on every screen so the collage gets the height. */
-#filter-toggle {
-  display: inline-flex;
-  align-self: center;
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 14px;
-}
-
 #filters {
-  display: none;
-  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr)) repeat(2, 150px) auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
   align-items: end;
-  margin-top: 12px;
 }
 
-#filters.open {
-  display: grid;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  z-index: 5;
-  margin: 0;
-  padding: 12px 18px 14px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
-}
+.menu > * { flex-shrink: 0; }
 
 #filters label {
   display: block;
@@ -232,10 +175,10 @@ h1 {
   font-family: system-ui, sans-serif;
 }
 
+/* The photos get the whole window. Everything else lives in the corner menu. */
 #stage {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
+  position: fixed;
+  inset: 0;
   overflow: hidden;
 }
 
@@ -248,9 +191,7 @@ h1 {
   scroll-behavior: auto;
   touch-action: pan-x;
   overscroll-behavior-x: contain;
-  background:
-    linear-gradient(180deg, rgba(226, 161, 90, 0.16), transparent 18px),
-    var(--bg);
+  background: var(--bg);
 }
 
 #strip {
@@ -265,6 +206,7 @@ h1 {
 .spacer { flex: 0 0 auto; height: 1px; }
 
 .day {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -274,19 +216,26 @@ h1 {
 }
 
 .day-label {
+  position: absolute;
+  top: calc(50% - var(--band) / 2 + 8px);
+  left: 8px;
+  z-index: 1;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  height: var(--label-h);
+  max-width: calc(100% - 16px - var(--day-gap));
   margin: 0;
-  padding-left: 2px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(12, 10, 8, 0.72);
+  pointer-events: none;
   font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
 }
 
 .day-label .when {
-  color: var(--muted);
+  color: var(--ink);
   font-family: system-ui, sans-serif;
   font-size: 0.8rem;
   letter-spacing: 0.06em;
@@ -295,12 +244,10 @@ h1 {
 
 .day-label .year {
   color: var(--amber);
-  font-size: 1.15rem;
+  font-size: 1rem;
 }
 
-.day.is-new-year .day-label .year { font-size: 1.4rem; }
-
-/* The collage band: up to seven and a half inches tall. */
+/* The collage band: the full height of the window, less a thin margin. */
 .band {
   display: flex;
   gap: var(--gap);
@@ -361,12 +308,81 @@ h1 {
 
 .empty[hidden], .banner[hidden], #filters[hidden] { display: none; }
 
-footer {
-  min-width: 0;
-  border-top: 1px solid var(--line);
-  padding: 10px 18px calc(12px + env(safe-area-inset-bottom));
-  background: #100e0c;
+.corner {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
+
+.corner .banner { margin: 0; max-width: min(60vw, 420px); }
+
+#menu-toggle {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid rgba(244, 236, 223, 0.25);
+  border-radius: 50%;
+  background: rgba(12, 10, 8, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+#menu-toggle svg { fill: currentColor; }
+
+.menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(440px, 100vw);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: calc(16px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: -16px 0 32px rgba(0, 0, 0, 0.5);
+}
+
+.menu[hidden] { display: none; }
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.menu-head h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 500;
+}
+
+#menu-close {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-family: system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.menu-time {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.words, .people-row, .actions { grid-column: 1 / -1; }
 
 .scrub-row, .jump-row {
   display: flex;
@@ -374,7 +390,9 @@ footer {
   gap: 12px;
 }
 
-.jump-row { margin-top: 8px; }
+.jump-row { margin-top: 8px; flex-wrap: wrap; }
+
+.jump-row .hint { flex-basis: 100%; }
 
 .scrub-label, .jump-row label, #scrub-readout {
   font-family: system-ui, sans-serif;
@@ -388,7 +406,7 @@ footer {
 }
 
 #scrub-readout {
-  min-width: 11rem;
+  min-width: 7rem;
   color: var(--ink);
   text-align: right;
 }
@@ -457,21 +475,9 @@ dialog::backdrop { background: rgba(8, 6, 4, 0.88); }
 }
 
 @media (max-width: 720px) {
-  header { padding: 12px; }
-  h1 { font-size: 1.45rem; }
-  #filters.open {
-    grid-template-columns: 1fr 1fr;
-    max-height: 62vh;
-    overflow: auto;
-    padding-bottom: 8px;
-  }
-  .words, .people-row, .actions { grid-column: 1 / -1; }
   .focus button { padding: 6px 10px; white-space: nowrap; }
-  .brand { flex-wrap: wrap; }
   .lightbox-frame { padding: 10px; }
   #scrub-readout { min-width: 7.5rem; font-size: 0.85rem; }
-  .jump-row { flex-wrap: wrap; }
-  .jump-row .hint { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
